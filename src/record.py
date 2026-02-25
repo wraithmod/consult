@@ -29,7 +29,11 @@ AUDIO_DIR = Path(__file__).parent.parent / "audio"
 
 
 def list_devices() -> None:
-    devices = sd.query_devices()
+    try:
+        devices = sd.query_devices()
+    except Exception as exc:
+        print(f"ERROR: Could not query audio devices: {exc}", file=sys.stderr)
+        sys.exit(1)
     print("Available input devices:")
     for i, d in enumerate(devices):
         if d["max_input_channels"] > 0:
@@ -72,15 +76,33 @@ def record(device: int | None = None) -> Path:
         stream_kwargs["device"] = device
 
     print("Press Enter to start recording...")
-    input()
+    try:
+        input()
+    except EOFError:
+        print("ERROR: No interactive input available to start recording.", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        sys.exit(130)
 
     timer = threading.Thread(target=_timer_thread, args=(stop_event,), daemon=True)
 
-    with sd.InputStream(**stream_kwargs):
-        timer.start()
-        print("  [recording — press Enter to stop]", file=sys.stderr)
-        input()
+    try:
+        with sd.InputStream(**stream_kwargs):
+            timer.start()
+            print("  [recording — press Enter to stop]", file=sys.stderr)
+            try:
+                input()
+            except KeyboardInterrupt:
+                pass
+            except EOFError:
+                print("\n  [stdin closed — stopping recording]", file=sys.stderr)
+            finally:
+                stop_event.set()
+    except Exception as exc:
         stop_event.set()
+        print(f"ERROR: Could not start audio input stream: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     timer.join()
 
@@ -103,7 +125,7 @@ def record(device: int | None = None) -> Path:
 
     duration = len(audio_int16) / SAMPLE_RATE
     mins, secs = divmod(int(duration), 60)
-    print(f"Saved ({mins}:{secs:02d}): {out_path}")
+    print(f"Saved ({mins}:{secs:02d}): {out_path.name}")
     return out_path
 
 

@@ -15,10 +15,13 @@ Privacy and compliance:
 import argparse
 import json
 import os
+import re
+import socket
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+import urllib.error
 import urllib.request
 
 
@@ -62,8 +65,8 @@ def resolve_output_dir(output_dir_arg: str) -> Path:
 
 def read_transcript(path_str: str) -> str:
     transcript_path = Path(path_str)
-    if not transcript_path.exists():
-        raise FileNotFoundError(f"Transcript file not found: {transcript_path}")
+    if not transcript_path.is_file():
+        raise FileNotFoundError(f"Transcript file not found: {transcript_path.name}")
     if transcript_path.suffix.lower() != ".txt":
         raise ValueError("Transcript file must be a .txt file")
     return transcript_path.read_text(encoding="utf-8")
@@ -106,23 +109,24 @@ def call_ollama(model: str, full_prompt: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
             raw = response.read().decode("utf-8")
-    except ConnectionError as exc:
+    except urllib.error.HTTPError as exc:
         raise RuntimeError(
-            "Could not connect to the local Ollama API at "
-            f"{OLLAMA_URL}. Is Ollama running?"
+            f"Ollama API returned HTTP {exc.code}. Ensure the model '{model}' is available locally."
         ) from exc
-    except Exception as exc:  # urllib raises URLError for connection failures
-        if exc.__class__.__name__ in {"URLError", "TimeoutError"}:
-            raise RuntimeError(
-                "Could not reach the local Ollama API at "
-                f"{OLLAMA_URL}. Ensure Ollama is running and the model is available."
-            ) from exc
-        raise
+    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+        raise RuntimeError(
+            "Could not reach the local Ollama API at "
+            f"{OLLAMA_URL}. Ensure Ollama is running and the model is available."
+        ) from exc
 
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Ollama returned invalid JSON.") from exc
+
+    error_text = parsed.get("error")
+    if isinstance(error_text, str) and error_text.strip():
+        raise RuntimeError(f"Ollama error: {error_text.strip()}")
 
     response_text = parsed.get("response")
     if not isinstance(response_text, str) or not response_text.strip():
@@ -169,13 +173,8 @@ def _extract_mbs_line(text: str) -> str:
             segment = text[idx: idx + 300]
             break
 
-    chosen = None
-    for candidate in ("23", "36", "44"):
-        if candidate in segment:
-            chosen = candidate
-            break
-    if chosen is None:
-        chosen = "23"
+    match = re.search(r"\b(23|36|44)\b", segment)
+    chosen = match.group(1) if match else "23"
 
     justification = ""
     if "—" in segment:
@@ -234,7 +233,7 @@ def maybe_open_in_editor(note_path: Path) -> None:
         subprocess.run([editor, str(note_path)], check=False)
     except FileNotFoundError:
         print(
-            f"Editor '{editor}' was not found. Note saved at: {note_path}",
+            f"Editor '{editor}' was not found. Note saved as: {note_path.name}",
             file=sys.stderr,
         )
 
@@ -256,7 +255,7 @@ def main() -> None:
         print("Cancelled.", file=sys.stderr)
         sys.exit(130)
 
-    print(note_path)
+    print(note_path.name)
 
     if not args.no_review:
         maybe_open_in_editor(note_path)

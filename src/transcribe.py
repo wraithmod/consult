@@ -47,9 +47,11 @@ def _transcribe_with_cli(
         "--output_dir", str(output_dir),
         "--output_format", "txt",
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError("whisper CLI executable not found") from exc
     if result.returncode != 0:
-        print(result.stderr, file=sys.stderr)
         raise RuntimeError(f"whisper CLI failed with exit code {result.returncode}")
 
     cli_out = output_dir / (audio_path.stem + ".txt")
@@ -57,7 +59,7 @@ def _transcribe_with_cli(
         text = cli_out.read_text(encoding="utf-8").strip()
         cli_out.unlink()
         return text
-    raise FileNotFoundError(f"Expected CLI output not found: {cli_out}")
+    raise RuntimeError("whisper CLI completed but did not produce a transcript file")
 
 
 def transcribe(
@@ -71,6 +73,9 @@ def transcribe(
 
     Returns the path of the saved transcript.
     """
+    if not audio_path.is_file():
+        raise FileNotFoundError(f"Audio file not found: {audio_path.name}")
+
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / (audio_path.stem + ".txt")
 
@@ -79,7 +84,7 @@ def transcribe(
     except ModuleNotFoundError:
         try:
             text = _transcribe_with_cli(audio_path, model, language, output_dir)
-        except (FileNotFoundError, RuntimeError):
+        except FileNotFoundError:
             print(
                 "ERROR: Neither the openai-whisper Python package nor the whisper CLI\n"
                 "       could be found. Install one of:\n"
@@ -88,9 +93,15 @@ def transcribe(
                 file=sys.stderr,
             )
             sys.exit(1)
+        except RuntimeError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+    except Exception as exc:
+        print(f"ERROR: Whisper transcription failed: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     out_path.write_text(text, encoding="utf-8")
-    print(f"Saved transcript: {out_path}")
+    print(f"Saved transcript: {out_path.name}")
     return out_path
 
 
@@ -133,14 +144,17 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.audio:
-        if not args.audio.exists():
-            print(f"ERROR: Audio file not found: {args.audio}", file=sys.stderr)
+        if not args.audio.is_file():
+            print(f"ERROR: Audio file not found: {args.audio.name}", file=sys.stderr)
             sys.exit(1)
         transcribe(args.audio, model=args.model, language=args.language, output_dir=args.output_dir)
     else:
+        if not args.audio_dir.is_dir():
+            print(f"ERROR: Audio directory not found: {args.audio_dir.name}", file=sys.stderr)
+            sys.exit(1)
         wav_files = sorted(args.audio_dir.glob("*.wav"))
         if not wav_files:
-            print(f"No WAV files found in {args.audio_dir}", file=sys.stderr)
+            print(f"No WAV files found in {args.audio_dir.name}", file=sys.stderr)
             sys.exit(1)
         for wav in wav_files:
             transcribe(wav, model=args.model, language=args.language, output_dir=args.output_dir)

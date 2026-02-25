@@ -6,7 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AI-assisted medical consult transcription application for a GP registrar. Captures and processes clinical consultations, summarising them into structured medical documentation — all processed and stored **locally**. No patient health information (PHI) is transmitted to external services.
 
-**Status: greenfield project — no source code exists yet.**
+**Current status (25 February 2026):**
+- `src/record.py`: implemented — WAV audio capture, 16 kHz mono, `sounddevice`
+- `src/transcribe.py`: implemented — Whisper STT, Python library + CLI fallback
+- `src/summarise.py`: implemented — Ollama SOAP note generator, MBS/PBS/GPMP context
+- `src/review.py`: in progress
+- `src/pipeline.py`: in progress
 
 ## Hard Requirements
 
@@ -39,18 +44,31 @@ python3 src/record.py                  # uses default input device
 python3 src/record.py --device N       # select device by index
 python3 src/record.py --list-devices   # list available input devices
 
-# Transcribe (once Whisper is installed)
-whisper audio/<file>.wav --model medium --language en
+# Transcribe with local Whisper (Python library, with CLI fallback if needed)
+python3 src/transcribe.py --audio audio/<file>.wav
+python3 src/transcribe.py --audio-dir audio/ --model medium --language en
+python3 src/transcribe.py --audio audio/<file>.wav --output-dir transcripts/
+
+# Summarise to SOAP note using local Ollama
+python3 src/summarise.py --transcript transcripts/<file>.txt
+python3 src/summarise.py --transcript transcripts/<file>.txt --model llama3
+python3 src/summarise.py --transcript transcripts/<file>.txt --output-dir notes/ --no-review
 
 # Install dependencies
 sudo apt-get install -y libportaudio2  # system dep for sounddevice
 pip3 install -r requirements.txt --break-system-packages
 ```
 
-Install Whisper (requires ffmpeg):
+Install Whisper (requires ffmpeg; used by Python package and CLI workflows):
 ```bash
 sudo apt-get install -y ffmpeg
 pip3 install openai-whisper torch --break-system-packages
+```
+
+Run Ollama locally for summarisation:
+```bash
+ollama serve
+ollama pull llama3
 ```
 
 ## Medical Documentation Standards
