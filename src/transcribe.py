@@ -53,15 +53,22 @@ def _diarise_with_pyannote(
     print("  Loading pyannote diarisation pipeline…", file=sys.stderr)
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
-        use_auth_token=hf_token,
+        token=hf_token,
     )
     print(f"  Running diarisation on {audio_path.name}…", file=sys.stderr)
     diarization = pipeline(str(audio_path))
 
+    # pyannote 4.x wraps output in DiarizeOutput; unwrap to the Annotation
+    annotation = (
+        diarization.speaker_diarization
+        if hasattr(diarization, "speaker_diarization")
+        else diarization
+    )
+
     # Build sorted list of (start, end, speaker_label)
     speaker_segments = sorted(
         (turn.start, turn.end, speaker)
-        for turn, _, speaker in diarization.itertracks(yield_label=True)
+        for turn, _, speaker in annotation.itertracks(yield_label=True)
     )
 
     def _speaker_at(t: float) -> str:
