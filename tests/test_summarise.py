@@ -60,6 +60,7 @@ def test_build_prompt_contains_australian_english():
     assert "MBS" in prompt
     assert "GP Management Plan item 721" in prompt
     assert "Transcript:" in prompt
+    assert "Consultation Summary" in prompt
 
 
 def test_call_ollama_success():
@@ -111,16 +112,20 @@ def test_call_ollama_bad_json(tmp_path):
 
 
 def test_format_soap_markdown():
-    llm_output = """
-Subjective: 52-year-old male with mild recurrent headaches and elevated pharmacy BP readings. No focal neuro symptoms.
-Objective: BP 158/94 sitting, repeat elevated. Weight 92.4 kg. No red flag features reported.
-Assessment: Likely essential hypertension with tension-type headaches; no acute neurological red flags.
-Plan: Start amlodipine 5 mg daily (PBS listed if applicable), lifestyle advice, home BP log, review in 2-4 weeks.
-Suggested MBS Item: 36 - Level C consultation, approximately 25 minutes.
-""".strip()
+    llm_output = (
+        "## Consultation Summary\n"
+        "Patient presented with ankle pain and a history of hypertension.\n"
+        "Subjective: 52-year-old male with mild recurrent headaches and elevated pharmacy BP readings. No focal neuro symptoms.\n"
+        "Objective: BP 158/94 sitting, repeat elevated. Weight 92.4 kg. No red flag features reported.\n"
+        "Assessment: Likely essential hypertension with tension-type headaches; no acute neurological red flags.\n"
+        "Plan: Start amlodipine 5 mg daily (PBS listed if applicable), lifestyle advice, home BP log, review in 2-4 weeks.\n"
+        "Suggested MBS Item: 36 - Level C consultation, approximately 25 minutes.\n"
+    ).strip()
 
     formatted = summarise.format_soap_markdown(llm_output)
 
+    assert "## Consultation Summary" in formatted
+    assert "ankle pain" in formatted
     assert "## SOAP Note" in formatted
     assert "**Subjective:**" in formatted
     assert "mild recurrent headaches" in formatted
@@ -138,6 +143,7 @@ def test_summarise_saves_file(tmp_path):
     transcript_path.write_text(SYNTHETIC_TRANSCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
     output_dir = tmp_path / "notes"
     fake_llm_output = (
+        "## Consultation Summary\nPatient presented with headaches.\n"
         "Subjective: Headaches and elevated BP.\n"
         "Objective: BP elevated in clinic.\n"
         "Assessment: Probable hypertension.\n"
@@ -162,6 +168,7 @@ def test_summarise_saves_file(tmp_path):
     saved = note_path.read_text(encoding="utf-8")
     assert "## SOAP Note" in saved
     assert "Probable hypertension" in saved
+    assert "Patient presented with headaches" in saved
 
 
 def test_summarise_empty_transcript_exits(tmp_path):

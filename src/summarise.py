@@ -87,8 +87,15 @@ def build_prompt(transcript_text: str) -> str:
         "23 = Level B 6-19 min; 36 = Level C 20-39 min; 44 = Level D 40+ min. "
         "Reference GP Management Plan item 721 and Mental Health Treatment Plan items "
         "2710/2712 where clinically applicable. "
-        "Return only a SOAP note and suggested MBS item in plain text with clear labels for "
-        "Subjective, Objective, Assessment, Plan, and Suggested MBS Item. "
+        "Return your response using EXACTLY these section headers on their own line, "
+        "in this order:\n"
+        "## Consultation Summary\n"
+        "## Subjective\n"
+        "## Objective\n"
+        "## Assessment\n"
+        "## Plan\n"
+        "## Suggested MBS Item\n"
+        "Do not use any other header format. Do not use bold for section headers. "
         "Do not include disclaimers or mention AI."
     )
 
@@ -139,32 +146,56 @@ def call_ollama(model: str, full_prompt: str) -> str:
 
 
 def _extract_section(text: str, label: str, next_labels: list[str]) -> str:
-    lower_text = text.lower()
-    markers = [f"**{label.lower()}:**", f"{label.lower()}:", f"## {label.lower()}"]
-    start = -1
-    start_len = 0
-    for marker in markers:
-        idx = lower_text.find(marker)
-        if idx != -1:
-            start = idx
-            start_len = len(marker)
-            break
-    if start == -1:
+    # Build a pattern that matches the label under any of these header formats:
+    #   ## Label        (markdown h2, with or without trailing colon)
+    #   ### Label       (markdown h3, with or without trailing colon)
+    #   **Label:**      (markdown bold with colon inside)
+    #   **Label**:      (markdown bold with colon outside)
+    #   Label:          (plain text, any capitalisation)
+    escaped = re.escape(label)
+    header_pattern = (
+        r"(?:"
+        r"#{2,3}\s+" + escaped + r":?"   # ## Label  or  ### Label  (optional colon)
+        r"|"
+        r"\*\*" + escaped + r":\*\*"     # **Label:**
+        r"|"
+        r"\*\*" + escaped + r"\*\*:"     # **Label**:
+        r"|"
+        r"^" + escaped + r":"            # Label:  at start of line
+        r")"
+    )
+
+    match = re.search(header_pattern, text, re.IGNORECASE | re.MULTILINE)
+    if not match:
         return ""
 
-    content_start = start + start_len
+    content_start = match.end()
     content_end = len(text)
+
     for next_label in next_labels:
-        for marker in (
-            f"**{next_label.lower()}:**",
-            f"{next_label.lower()}:",
-            f"## {next_label.lower()}",
-        ):
-            idx = lower_text.find(marker, content_start)
-            if idx != -1 and idx < content_end:
-                content_end = idx
+        next_escaped = re.escape(next_label)
+        next_pattern = (
+            r"(?:"
+            r"#{2,3}\s+" + next_escaped + r":?"
+            r"|"
+            r"\*\*" + next_escaped + r":\*\*"
+            r"|"
+            r"\*\*" + next_escaped + r"\*\*:"
+            r"|"
+            r"^" + next_escaped + r":"
+            r")"
+        )
+        next_match = re.search(next_pattern, text[content_start:], re.IGNORECASE | re.MULTILINE)
+        if next_match:
+            candidate_end = content_start + next_match.start()
+            if candidate_end < content_end:
+                content_end = candidate_end
 
     return text[content_start:content_end].strip(" \n\r*-")
+
+
+def _extract_consultation_summary(text: str) -> str:
+    return _extract_section(text, "Consultation Summary", ["Subjective", "Objective", "Assessment", "Plan", "Suggested MBS Item"])
 
 
 def _extract_mbs_line(text: str) -> str:
@@ -195,12 +226,15 @@ def _extract_mbs_line(text: str) -> str:
 
 
 def format_soap_markdown(llm_text: str) -> str:
+    consultation_summary = _extract_consultation_summary(llm_text)
     subjective = _extract_section(llm_text, "Subjective", ["Objective", "Assessment", "Plan", "Suggested MBS Item"])
     objective = _extract_section(llm_text, "Objective", ["Assessment", "Plan", "Suggested MBS Item"])
     assessment = _extract_section(llm_text, "Assessment", ["Plan", "Suggested MBS Item"])
     plan = _extract_section(llm_text, "Plan", ["Suggested MBS Item"])
     suggested_mbs = _extract_mbs_line(llm_text)
 
+    if not consultation_summary:
+        consultation_summary = "Unable to extract consultation summary. Review source transcript."
     if not subjective:
         subjective = "Unable to reliably extract Subjective section from model output. Review source transcript and regenerate."
     if not objective:
@@ -212,6 +246,9 @@ def format_soap_markdown(llm_text: str) -> str:
 
     today = date.today().isoformat()
     return (
+        f"## Consultation Summary — {today}\n"
+        f"{consultation_summary}\n"
+        "\n"
         f"## SOAP Note — {today}\n"
         f"**Subjective:** {subjective}\n"
         f"**Objective:** {objective}\n"
