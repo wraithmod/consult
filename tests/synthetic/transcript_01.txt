@@ -1,0 +1,34 @@
+Doctor: Good morning, Mr Taylor. I'm Dr Singh. What would you like to go over today?
+Patient: Morning doctor. I've been getting mild headaches on and off for a few weeks, and my chemist blood pressure check was high.
+Doctor: Okay. Tell me about the headaches.
+Patient: Mostly a dull pressure across the forehead, usually late afternoon. Not severe, no vomiting, no vision loss, no weakness or anything like that.
+Doctor: Any chest pain, shortness of breath, palpitations, or swelling in the legs?
+Patient: No chest pain or shortness of breath. Just a bit stressed with work lately.
+Doctor: Have you checked your blood pressure anywhere else?
+Patient: Twice at the pharmacy this week. One was 156 over 92 and another was 160 over 95.
+Doctor: Right. We'll check it properly here as well. Any past history of high blood pressure?
+Patient: Not diagnosed. Last year someone said it was "borderline" at a work medical.
+Doctor: What medications are you taking at the moment, including over-the-counter tablets?
+Patient: Just atorvastatin 20 mg at night. I take paracetamol occasionally for the headaches. No regular anti-inflammatories.
+Doctor: Any allergies to medicines?
+Patient: No known drug allergies.
+Doctor: Do you smoke or drink alcohol?
+Patient: I don't smoke. I have a couple of beers on weekends.
+Doctor: How is your diet and exercise at the moment?
+Patient: Could be better. I sit a lot for work and probably eat too much takeaway.
+Doctor: Thanks. I'll do your observations now.
+Doctor: Blood pressure today is 158/94 sitting, repeated after a few minutes and still elevated. Weight is 92.4 kg.
+Patient: Okay.
+Doctor: Your headaches sound mild and non-focal, and the elevated blood pressure may be contributing. I don't see red flags from what you've told me, but we'll monitor closely.
+Patient: Do I need tablets already?
+Doctor: Given the persistent readings and your cardiovascular risk factors, I think it is reasonable to start treatment as well as lifestyle measures. I'd suggest amlodipine 5 mg once daily.
+Patient: Any side effects I should watch for?
+Doctor: Common ones include ankle swelling, flushing, or light-headedness. If you get significant swelling, rash, or feel unwell, let me know.
+Patient: Alright.
+Doctor: We'll also work on salt reduction, regular walking most days, weight reduction, and limiting alcohol. I'd like you to monitor home blood pressure if possible and keep a log.
+Patient: I can do that.
+Doctor: I'll arrange a follow-up in about 2 to 4 weeks to review your blood pressure response and headaches, and we can adjust the dose if needed.
+Patient: Sounds good.
+Doctor: This has been a longer review today, about 25 minutes, so it's in the Level C consultation range. Any other questions before we finish?
+Patient: No, that's everything. Thanks doctor.
+

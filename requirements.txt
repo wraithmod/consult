@@ -1,3 +1,4 @@
 sounddevice>=0.4.6
 numpy>=1.24
 openai-whisper>=20231117
+pytest>=8.0
