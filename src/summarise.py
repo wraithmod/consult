@@ -69,7 +69,11 @@ def read_transcript(path_str: str) -> str:
         raise FileNotFoundError(f"Transcript file not found: {transcript_path.name}")
     if transcript_path.suffix.lower() != ".txt":
         raise ValueError("Transcript file must be a .txt file")
-    return transcript_path.read_text(encoding="utf-8")
+    transcript_text = transcript_path.read_text(encoding="utf-8")
+    if not transcript_text.strip():
+        print("Error: Transcript file is empty.", file=sys.stderr)
+        sys.exit(1)
+    return transcript_text
 
 
 def build_prompt(transcript_text: str) -> str:

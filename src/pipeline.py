@@ -194,7 +194,7 @@ def main() -> None:
         str(transcript_path),
     ]
     code, review_stdout = _run_subprocess(review_cmd)
-    if code != 0:
+    if code not in (0, 1, 2):
         _fail("Review", code)
     status = _extract_review_status(review_stdout) or "Unknown"
 
