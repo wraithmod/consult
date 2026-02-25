@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Patient data — must never be committed
+audio/
+transcripts/
+notes/
+
+# Whisper model cache
+.cache/
