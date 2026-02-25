@@ -220,6 +220,8 @@ def _extract_mbs_line(text: str) -> str:
         tail = segment.split(":", 1)[1]
         justification = tail.splitlines()[0].strip()
 
+    justification = justification.strip(" \t.,;:()[]")
+
     if not justification:
         justification = "Based on the documented consultation complexity and duration estimate."
     return f"{chosen} — {justification}"

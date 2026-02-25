@@ -136,6 +136,20 @@ def test_format_soap_markdown():
     assert "**Plan:**" in formatted
     assert "amlodipine 5 mg daily" in formatted
     assert "**Suggested MBS Item:** 36" in formatted
+    assert formatted.count(")") == 0 or "36 —" in formatted  # no stray trailing )
+
+
+def test_mbs_trailing_punctuation_stripped():
+    """Trailing ) . , from LLM output must be stripped from MBS justification."""
+    llm_output = "Suggested MBS Item: 36 — Level C consultation (approximately 25 minutes)"
+    result = summarise._extract_mbs_line(llm_output)
+    assert result == "36 — Level C consultation (approximately 25 minutes"  # outer ) stripped
+    assert not result.endswith(")")
+
+    llm_output2 = "Suggested MBS Item: 36 - 39 minutes)"
+    result2 = summarise._extract_mbs_line(llm_output2)
+    assert not result2.endswith(")")
+    assert "39 minutes" in result2
 
 
 def test_summarise_saves_file(tmp_path):
