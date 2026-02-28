@@ -17,6 +17,7 @@ Usage:
     python3 src/transcribe.py --audio audio/20250225_143022.wav --model large
     python3 src/transcribe.py --audio audio/20250225_143022.wav --model medium --language en
     python3 src/transcribe.py --audio audio/20250225_143022.wav --diarise --hf-token hf_...
+    python3 src/transcribe.py --audio audio/20250225_143022.wav --device cuda
 """
 
 import argparse
@@ -98,6 +99,60 @@ def _diarise_with_pyannote(
     return "\n".join(f"[{speaker}]: {text}" for speaker, text in turns)
 
 
+def _resolve_device(device_arg: str) -> str:
+    """Resolve ``"auto"`` to ``"cuda"`` or ``"cpu"`` based on availability."""
+    if device_arg != "auto":
+        return device_arg
+    try:
+        import torch  # type: ignore
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
+
+
+def _transcribe_with_faster_whisper(
+    audio_path: Path,
+    model: str,
+    language: str,
+    device: str,
+) -> tuple[str, list]:
+    """Transcribe using the faster-whisper library (CTranslate2 backend).
+
+    Much faster than openai-whisper on the same hardware, especially on CPU
+    (int8 quantisation) or CUDA (float16).
+
+    Returns a tuple of (transcript_text, segments) where each segment dict has
+    ``start``, ``end``, and ``text`` keys, matching the contract of the other
+    backends.
+    """
+    try:
+        from faster_whisper import WhisperModel  # type: ignore
+    except ImportError as exc:
+        raise ImportError(
+            "faster-whisper is not installed. Install it with:\n"
+            "  pip3 install faster-whisper>=1.0 --break-system-packages"
+        ) from exc
+
+    compute_type = "float16" if device == "cuda" else "int8"
+    print(
+        f"  Loading faster-whisper model '{model}' on {device} ({compute_type})…",
+        file=sys.stderr,
+    )
+    wmodel = WhisperModel(model, device=device, compute_type=compute_type)
+
+    print(f"  Transcribing {audio_path.name} with faster-whisper…", file=sys.stderr)
+    segments_iter, _info = wmodel.transcribe(str(audio_path), language=language)
+
+    segments: list[dict] = []
+    text_parts: list[str] = []
+    for seg in segments_iter:
+        segments.append({"start": seg.start, "end": seg.end, "text": seg.text})
+        text_parts.append(seg.text)
+
+    full_text = "".join(text_parts).strip()
+    return full_text, segments
+
+
 def _transcribe_with_library(audio_path: Path, model: str, language: str) -> tuple[str, list]:
     """Transcribe using the openai-whisper Python library.
 
@@ -152,15 +207,25 @@ def transcribe(
     output_dir: Path = TRANSCRIPT_DIR,
     diarise: bool = False,
     hf_token: str = "",
+    device: str = "auto",
 ) -> Path:
     """
     Transcribe *audio_path* and save the result as a .txt file in *output_dir*.
+
+    The transcription backend is chosen in this order:
+    1. ``faster-whisper`` (fastest; requires ``pip install faster-whisper``).
+    2. ``openai-whisper`` Python library.
+    3. ``whisper`` CLI (slowest; no segment timing — diarisation unavailable).
 
     When *diarise* is ``True`` and a *hf_token* is supplied, speaker diarisation
     is attempted via pyannote.audio. Each line of the saved transcript will be
     prefixed with the speaker label, e.g. ``[SPEAKER_00]: …``. If pyannote.audio
     is not installed, a warning is printed and the plain transcript is saved
     instead.
+
+    *device* controls where faster-whisper runs: ``"auto"`` (default) selects
+    CUDA if available, otherwise CPU; pass ``"cuda"`` or ``"cpu"`` explicitly to
+    override.
 
     Returns the path of the saved transcript.
     """
@@ -170,25 +235,41 @@ def transcribe(
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / (audio_path.stem + ".txt")
 
+    resolved_device = _resolve_device(device)
+
+    # Attempt backends in order: faster-whisper → openai-whisper lib → whisper CLI.
+    text: str
+    segments: list
+
     try:
-        text, segments = _transcribe_with_library(audio_path, model, language)
-    except ModuleNotFoundError:
+        text, segments = _transcribe_with_faster_whisper(
+            audio_path, model, language, resolved_device
+        )
+    except ImportError:
+        # faster-whisper not installed — fall through to openai-whisper.
         try:
-            text, segments = _transcribe_with_cli(audio_path, model, language, output_dir)
-        except FileNotFoundError:
-            print(
-                "ERROR: Neither the openai-whisper Python package nor the whisper CLI\n"
-                "       could be found. Install one of:\n"
-                "         pip3 install openai-whisper torch --break-system-packages\n"
-                "         sudo apt-get install -y ffmpeg && pip3 install openai-whisper",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        except RuntimeError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
+            text, segments = _transcribe_with_library(audio_path, model, language)
+        except ModuleNotFoundError:
+            try:
+                text, segments = _transcribe_with_cli(audio_path, model, language, output_dir)
+            except FileNotFoundError:
+                print(
+                    "ERROR: Neither faster-whisper, the openai-whisper Python package,\n"
+                    "       nor the whisper CLI could be found. Install one of:\n"
+                    "         pip3 install faster-whisper>=1.0 --break-system-packages\n"
+                    "         pip3 install openai-whisper torch --break-system-packages\n"
+                    "         sudo apt-get install -y ffmpeg && pip3 install openai-whisper",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            except RuntimeError as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                sys.exit(1)
+        except Exception as exc:
+            print(f"ERROR: Whisper transcription failed: {exc}", file=sys.stderr)
             sys.exit(1)
     except Exception as exc:
-        print(f"ERROR: Whisper transcription failed: {exc}", file=sys.stderr)
+        print(f"ERROR: faster-whisper transcription failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
     if diarise and hf_token and segments:
@@ -253,6 +334,12 @@ def main() -> None:
         metavar="TOKEN",
         help="HuggingFace access token required for the pyannote diarisation model.",
     )
+    parser.add_argument(
+        "--device",
+        default="auto",
+        metavar="DEVICE",
+        help="Device for faster-whisper: 'auto' (default), 'cuda', or 'cpu'.",
+    )
     args = parser.parse_args()
 
     if args.audio:
@@ -266,6 +353,7 @@ def main() -> None:
             output_dir=args.output_dir,
             diarise=args.diarise,
             hf_token=args.hf_token,
+            device=args.device,
         )
     else:
         if not args.audio_dir.is_dir():
@@ -283,6 +371,7 @@ def main() -> None:
                 output_dir=args.output_dir,
                 diarise=args.diarise,
                 hf_token=args.hf_token,
+                device=args.device,
             )
 
 
