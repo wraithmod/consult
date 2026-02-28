@@ -19,6 +19,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 from datetime import date
 from pathlib import Path
 import urllib.error
@@ -26,6 +27,11 @@ import urllib.request
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
+
+# Overall generation timeout (seconds).
+_OVERALL_TIMEOUT = 120
+# Per-chunk read timeout (seconds) — used when streaming NDJSON responses.
+_CHUNK_TIMEOUT = 10
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,8 +113,15 @@ def build_prompt(transcript_text: str) -> str:
 
 
 def call_ollama(model: str, full_prompt: str) -> str:
+    """Send *full_prompt* to the local Ollama API and return the complete response.
+
+    Uses streaming (``"stream": true``) so tokens are printed to stderr as they
+    arrive, giving the GP immediate visual feedback.  Each chunk is expected
+    within *_CHUNK_TIMEOUT* seconds; the overall call must complete within
+    *_OVERALL_TIMEOUT* seconds.
+    """
     payload = json.dumps(
-        {"model": model, "prompt": full_prompt, "stream": False}
+        {"model": model, "prompt": full_prompt, "stream": True}
     ).encode("utf-8")
     request = urllib.request.Request(
         OLLAMA_URL,
@@ -117,9 +130,40 @@ def call_ollama(model: str, full_prompt: str) -> str:
         method="POST",
     )
 
+    deadline = time.monotonic() + _OVERALL_TIMEOUT
+    accumulated: list[str] = []
+
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            raw = response.read().decode("utf-8")
+        with urllib.request.urlopen(request, timeout=_CHUNK_TIMEOUT) as response:
+            for raw_line in response:
+                # Enforce the overall wall-clock timeout.
+                if time.monotonic() > deadline:
+                    raise TimeoutError(
+                        f"Ollama did not finish within {_OVERALL_TIMEOUT} seconds."
+                    )
+
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    # Ignore non-JSON lines (e.g. blank lines or keep-alives).
+                    continue
+
+                error_text = chunk.get("error")
+                if isinstance(error_text, str) and error_text.strip():
+                    raise RuntimeError(f"Ollama error: {error_text.strip()}")
+
+                token = chunk.get("response", "")
+                if token:
+                    accumulated.append(token)
+                    print(token, end="", flush=True, file=sys.stderr)
+
+                if chunk.get("done"):
+                    break
+
     except urllib.error.HTTPError as exc:
         raise RuntimeError(
             f"Ollama API returned HTTP {exc.code}. Ensure the model '{model}' is available locally."
@@ -130,19 +174,13 @@ def call_ollama(model: str, full_prompt: str) -> str:
             f"{OLLAMA_URL}. Ensure Ollama is running and the model is available."
         ) from exc
 
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Ollama returned invalid JSON.") from exc
+    # Emit a newline after the streamed tokens so the next log line is clean.
+    print(file=sys.stderr)
 
-    error_text = parsed.get("error")
-    if isinstance(error_text, str) and error_text.strip():
-        raise RuntimeError(f"Ollama error: {error_text.strip()}")
-
-    response_text = parsed.get("response")
-    if not isinstance(response_text, str) or not response_text.strip():
+    full_response = "".join(accumulated).strip()
+    if not full_response:
         raise RuntimeError("Ollama response did not contain a usable 'response' field.")
-    return response_text.strip()
+    return full_response
 
 
 def _extract_section(text: str, label: str, next_labels: list[str]) -> str:

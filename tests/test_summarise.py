@@ -13,16 +13,28 @@ from src import summarise
 SYNTHETIC_TRANSCRIPT = Path(__file__).parent / "synthetic" / "transcript_01.txt"
 
 
-def _urlopen_cm_with_bytes(payload: bytes):
-    response = mock.Mock()
-    response.read.return_value = payload
+def _urlopen_streaming_cm(ndjson_lines: list[bytes]):
+    """Return a mock context manager whose body iterates over *ndjson_lines*."""
+    response = mock.MagicMock()
+    response.__iter__ = mock.Mock(return_value=iter(ndjson_lines))
     cm = mock.MagicMock()
     cm.__enter__.return_value = response
     cm.__exit__.return_value = False
     return cm
 
 
-def _run_main_with_args(tmp_path: Path, transcript_path: Path, *, urlopen_side_effect=None, urlopen_bytes=None):
+def _single_chunk_cm(response_text: str) -> object:
+    """Streaming CM that returns a single done chunk containing *response_text*."""
+    line = json.dumps({"response": response_text, "done": True}).encode("utf-8") + b"\n"
+    return _urlopen_streaming_cm([line])
+
+
+def _bad_json_cm() -> object:
+    """Streaming CM that returns an unparseable line."""
+    return _urlopen_streaming_cm([b"{not-json\n"])
+
+
+def _run_main_with_args(tmp_path: Path, transcript_path: Path, *, urlopen_side_effect=None, urlopen_cm=None):
     args = argparse.Namespace(
         transcript=str(transcript_path),
         model="llama3",
@@ -35,12 +47,12 @@ def _run_main_with_args(tmp_path: Path, transcript_path: Path, *, urlopen_side_e
         patches.append(
             mock.patch.object(summarise.urllib.request, "urlopen", side_effect=urlopen_side_effect)
         )
-    elif urlopen_bytes is not None:
+    elif urlopen_cm is not None:
         patches.append(
             mock.patch.object(
                 summarise.urllib.request,
                 "urlopen",
-                return_value=_urlopen_cm_with_bytes(urlopen_bytes),
+                return_value=urlopen_cm,
             )
         )
 
@@ -64,16 +76,44 @@ def test_build_prompt_contains_australian_english():
 
 
 def test_call_ollama_success():
-    payload = json.dumps({"response": "SOAP note text"}).encode("utf-8")
+    """call_ollama assembles streamed NDJSON tokens into the full response."""
+    lines = [
+        json.dumps({"response": "SOAP ", "done": False}).encode() + b"\n",
+        json.dumps({"response": "note ", "done": False}).encode() + b"\n",
+        json.dumps({"response": "text", "done": True}).encode() + b"\n",
+    ]
+    cm = _urlopen_streaming_cm(lines)
 
-    with mock.patch.object(
-        summarise.urllib.request,
-        "urlopen",
-        return_value=_urlopen_cm_with_bytes(payload),
-    ):
+    with mock.patch.object(summarise.urllib.request, "urlopen", return_value=cm):
         result = summarise.call_ollama("llama3", "prompt text")
 
     assert result == "SOAP note text"
+
+
+def test_call_ollama_single_chunk():
+    """call_ollama works when the model returns everything in one done chunk."""
+    cm = _single_chunk_cm("SOAP note text")
+
+    with mock.patch.object(summarise.urllib.request, "urlopen", return_value=cm):
+        result = summarise.call_ollama("llama3", "prompt text")
+
+    assert result == "SOAP note text"
+
+
+def test_call_ollama_streaming_prints_tokens(capsys):
+    """Tokens are printed to stderr as they arrive."""
+    lines = [
+        json.dumps({"response": "Hello", "done": False}).encode() + b"\n",
+        json.dumps({"response": " world", "done": True}).encode() + b"\n",
+    ]
+    cm = _urlopen_streaming_cm(lines)
+
+    with mock.patch.object(summarise.urllib.request, "urlopen", return_value=cm):
+        summarise.call_ollama("llama3", "prompt")
+
+    err = capsys.readouterr().err
+    assert "Hello" in err
+    assert " world" in err
 
 
 def test_call_ollama_connection_error(tmp_path):
@@ -102,11 +142,26 @@ def test_call_ollama_timeout(tmp_path, timeout_exc):
 
 
 def test_call_ollama_bad_json(tmp_path):
+    """A non-JSON line in the stream is silently skipped; empty response raises RuntimeError."""
     transcript_path = tmp_path / "transcript.txt"
     transcript_path.write_text(SYNTHETIC_TRANSCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
 
     with pytest.raises(SystemExit) as excinfo:
-        _run_main_with_args(tmp_path, transcript_path, urlopen_bytes=b"{not-json")
+        _run_main_with_args(tmp_path, transcript_path, urlopen_cm=_bad_json_cm())
+
+    assert excinfo.value.code == 1
+
+
+def test_call_ollama_ollama_error_in_stream(tmp_path):
+    """An 'error' field in a streaming chunk raises RuntimeError."""
+    transcript_path = tmp_path / "transcript.txt"
+    transcript_path.write_text(SYNTHETIC_TRANSCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+
+    error_line = json.dumps({"error": "model not found"}).encode() + b"\n"
+    cm = _urlopen_streaming_cm([error_line])
+
+    with pytest.raises(SystemExit) as excinfo:
+        _run_main_with_args(tmp_path, transcript_path, urlopen_cm=cm)
 
     assert excinfo.value.code == 1
 
