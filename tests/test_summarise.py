@@ -116,6 +116,45 @@ def test_call_ollama_streaming_prints_tokens(capsys):
     assert " world" in err
 
 
+def test_call_ollama_payload_includes_keep_alive_and_options():
+    cm = _single_chunk_cm("ok")
+
+    with mock.patch.object(summarise, "_KEEP_ALIVE", "20m"), mock.patch.object(
+        summarise, "_NUM_PREDICT", 256
+    ), mock.patch.object(
+        summarise, "_TEMPERATURE", 0.2
+    ), mock.patch.object(
+        summarise.urllib.request, "urlopen", return_value=cm
+    ) as urlopen_mock:
+        summarise.call_ollama("llama3", "prompt text")
+
+    request = urlopen_mock.call_args[0][0]
+    payload = json.loads(request.data.decode("utf-8"))
+    assert payload["keep_alive"] == "20m"
+    assert payload["options"]["num_predict"] == 256
+    assert payload["options"]["temperature"] == 0.2
+    assert payload["stream"] is True
+
+
+def test_warmup_ollama_model_posts_non_streaming_request():
+    response = mock.MagicMock()
+    response.read.return_value = b'{"done":true}'
+    cm = mock.MagicMock()
+    cm.__enter__.return_value = response
+    cm.__exit__.return_value = False
+
+    with mock.patch.object(summarise, "_KEEP_ALIVE", "15m"), mock.patch.object(
+        summarise.urllib.request, "urlopen", return_value=cm
+    ) as urlopen_mock:
+        summarise.warmup_ollama_model("llama3")
+
+    request = urlopen_mock.call_args[0][0]
+    payload = json.loads(request.data.decode("utf-8"))
+    assert payload["stream"] is False
+    assert payload["model"] == "llama3"
+    assert payload["keep_alive"] == "15m"
+
+
 def test_call_ollama_connection_error(tmp_path):
     transcript_path = tmp_path / "transcript.txt"
     transcript_path.write_text(SYNTHETIC_TRANSCRIPT.read_text(encoding="utf-8"), encoding="utf-8")

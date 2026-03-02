@@ -24,13 +24,27 @@ except ImportError as e:
     sys.exit(1)
 
 app = FastAPI(title="Consult Audio Processing Server")
+DEFAULT_LLM_MODEL = os.environ.get("CONSULT_DEFAULT_LLM_MODEL", "llama3")
 
 # Ensure audio directory exists
 AUDIO_DIR = REPO_ROOT / "audio"
 AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
+
+@app.on_event("startup")
+async def preload_llm_model():
+    """Warm Ollama model on server startup to reduce first-request latency."""
+    try:
+        logger.info(f"Warming Ollama model {DEFAULT_LLM_MODEL}...")
+        summarise.warmup_ollama_model(DEFAULT_LLM_MODEL)
+        logger.info("Ollama model warmup complete.")
+    except Exception:
+        # Non-fatal: requests can still trigger model load on demand.
+        logger.exception("Ollama warmup failed; continuing without preloaded model.")
+
+
 @app.post("/process")
-async def process_audio(file: UploadFile = File(...), model_whisper: str = "medium", model_llm: str = "llama3"):
+async def process_audio(file: UploadFile = File(...), model_whisper: str = "medium", model_llm: str = DEFAULT_LLM_MODEL):
     """
     Receives a WAV file, transcribes it, and generates a SOAP note.
     """

@@ -41,6 +41,16 @@ def _env_int(name: str, default: int) -> int:
     return parsed
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 # Overall generation timeout per attempt (seconds).
 _OVERALL_TIMEOUT = _env_int("CONSULT_OLLAMA_OVERALL_TIMEOUT", 240)
 # Socket read timeout while waiting for streamed chunks from Ollama.
@@ -49,10 +59,30 @@ _READ_TIMEOUT = _env_int("CONSULT_OLLAMA_READ_TIMEOUT", 180)
 _TIMEOUT_RETRIES = _env_int("CONSULT_OLLAMA_TIMEOUT_RETRIES", 1)
 # Fixed backoff between timeout retries (seconds).
 _RETRY_BACKOFF_SECONDS = _env_int("CONSULT_OLLAMA_TIMEOUT_BACKOFF_SECONDS", 2)
+# Keep the model in memory after requests to avoid repeated cold-start loads.
+_KEEP_ALIVE = os.environ.get("CONSULT_OLLAMA_KEEP_ALIVE", "20m")
+# Optional generation-length cap for faster responses (0 means unset).
+_NUM_PREDICT = _env_int("CONSULT_OLLAMA_NUM_PREDICT", 0)
+# Low temperature keeps deterministic SOAP outputs; can be overridden.
+_TEMPERATURE = _env_float("CONSULT_OLLAMA_TEMPERATURE", 0.1)
 
 
 class OllamaOverallTimeoutError(TimeoutError):
     """Raised when the full Ollama generation exceeds the wall-clock budget."""
+
+
+def _build_generate_payload(model: str, prompt: str, *, stream: bool) -> dict:
+    payload: dict = {
+        "model": model,
+        "prompt": prompt,
+        "stream": stream,
+        "keep_alive": _KEEP_ALIVE,
+    }
+    options: dict[str, int | float] = {"temperature": _TEMPERATURE}
+    if _NUM_PREDICT > 0:
+        options["num_predict"] = _NUM_PREDICT
+    payload["options"] = options
+    return payload
 
 
 def parse_args() -> argparse.Namespace:
@@ -141,9 +171,7 @@ def call_ollama(model: str, full_prompt: str) -> str:
     *_READ_TIMEOUT* seconds for the next chunk; the overall call must complete within
     *_OVERALL_TIMEOUT* seconds.
     """
-    payload = json.dumps(
-        {"model": model, "prompt": full_prompt, "stream": True}
-    ).encode("utf-8")
+    payload = json.dumps(_build_generate_payload(model, full_prompt, stream=True)).encode("utf-8")
     request = urllib.request.Request(
         OLLAMA_URL,
         data=payload,
@@ -233,6 +261,19 @@ def call_ollama(model: str, full_prompt: str) -> str:
         f"Timed out waiting for Ollama response chunks from {OLLAMA_URL} after {total_attempts} attempt(s). "
         "Ollama may still be starting the model; try again or increase the read timeout."
     ) from last_timeout
+
+
+def warmup_ollama_model(model: str) -> None:
+    """Preload and keep the model in memory to reduce first-token latency."""
+    payload = json.dumps(_build_generate_payload(model, "", stream=False)).encode("utf-8")
+    request = urllib.request.Request(
+        OLLAMA_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=_READ_TIMEOUT) as response:
+        response.read()
 
 
 def _extract_section(text: str, label: str, next_labels: list[str]) -> str:
