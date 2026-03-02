@@ -161,7 +161,25 @@
       return "webm";
     }
 
+    function getMicPrereqError() {
+      if (!window.isSecureContext) {
+        return "Microphone requires a secure context. Use HTTPS or open this app via localhost.";
+      }
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+        return "This browser session does not expose getUserMedia. Check browser permissions/context.";
+      }
+      if (!window.MediaRecorder) {
+        return "MediaRecorder is not available in this browser.";
+      }
+      return "";
+    }
+
     async function startRecording() {
+      const prereqError = getMicPrereqError();
+      if (prereqError) {
+        setStatus(`Microphone error: ${prereqError}`);
+        return;
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mimeType = preferredMimeType();
@@ -182,7 +200,8 @@
         $send.disabled = true;
         setStatus("Recording...");
       } catch (err) {
-        setStatus(`Microphone error: ${err.message}`);
+        const reason = err && err.message ? err.message : String(err);
+        setStatus(`Microphone error: ${reason}`);
       }
     }
 
@@ -227,6 +246,11 @@
     $start.addEventListener("click", startRecording);
     $stop.addEventListener("click", stopRecording);
     $send.addEventListener("click", processRecording);
+
+    const startupMicError = getMicPrereqError();
+    if (startupMicError) {
+      setStatus(`Microphone unavailable: ${startupMicError}`);
+    }
   </script>
 </body>
 </html>
