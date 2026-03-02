@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import wave
+import requests
 from datetime import datetime
 from pathlib import Path
 
@@ -54,7 +55,7 @@ def _timer_thread(stop_event: threading.Event) -> None:
     sys.stderr.flush()
 
 
-def record(device: int | None = None) -> Path:
+def record(device: int | None = None, server_url: str | None = None) -> Path:
     """Record until the user presses Enter; return the saved WAV path."""
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -126,6 +127,18 @@ def record(device: int | None = None) -> Path:
     duration = len(audio_int16) / SAMPLE_RATE
     mins, secs = divmod(int(duration), 60)
     print(f"Saved ({mins}:{secs:02d}): {out_path.name}")
+
+    if server_url:
+        print(f"Sending audio to server: {server_url}...")
+        try:
+            with out_path.open("rb") as f:
+                response = requests.post(server_url, files={"file": (out_path.name, f, "audio/wav")})
+                response.raise_for_status()
+                print("Server response:")
+                print(response.json().get("note", "No note returned."))
+        except Exception as exc:
+            print(f"ERROR: Failed to send audio to server: {exc}", file=sys.stderr)
+
     return out_path
 
 
@@ -145,13 +158,19 @@ def main() -> None:
         metavar="N",
         help="Input device index (see --list-devices).",
     )
+    parser.add_argument(
+        "--server",
+        default=None,
+        metavar="URL",
+        help="Send the recording to this server URL for processing (e.g., http://localhost:8000/process).",
+    )
     args = parser.parse_args()
 
     if args.list_devices:
         list_devices()
         return
 
-    record(device=args.device)
+    record(device=args.device, server_url=args.server)
 
 
 if __name__ == "__main__":
