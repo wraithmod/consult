@@ -23,9 +23,37 @@ Usage:
 import argparse
 import subprocess
 import sys
+import wave
 from pathlib import Path
 
+import numpy as np
+
 TRANSCRIPT_DIR = Path(__file__).parent.parent / "transcripts"
+_MIN_AUDIO_RMS = 1e-4
+
+
+def _estimate_wav_rms(audio_path: Path) -> float | None:
+    """Return RMS amplitude for WAV files, or None if unreadable/non-WAV."""
+    try:
+        with wave.open(str(audio_path), "rb") as wf:
+            frames = wf.readframes(wf.getnframes())
+            channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+    except (wave.Error, EOFError, FileNotFoundError, OSError):
+        return None
+
+    if sampwidth == 2:
+        audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+    elif sampwidth == 1:
+        audio = np.frombuffer(frames, dtype=np.int8).astype(np.float32) / 128.0
+    else:
+        return None
+
+    if channels > 1:
+        audio = audio.reshape(-1, channels).mean(axis=1)
+    if audio.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(audio * audio)))
 
 
 def _diarise_with_pyannote(
@@ -141,7 +169,12 @@ def _transcribe_with_faster_whisper(
     wmodel = WhisperModel(model, device=device, compute_type=compute_type)
 
     print(f"  Transcribing {audio_path.name} with faster-whisper…", file=sys.stderr)
-    segments_iter, _info = wmodel.transcribe(str(audio_path), language=language)
+    segments_iter, _info = wmodel.transcribe(
+        str(audio_path),
+        language=language,
+        vad_filter=True,
+        condition_on_previous_text=False,
+    )
 
     segments: list[dict] = []
     text_parts: list[str] = []
@@ -231,6 +264,13 @@ def transcribe(
     """
     if not audio_path.is_file():
         raise FileNotFoundError(f"Audio file not found: {audio_path.name}")
+
+    rms = _estimate_wav_rms(audio_path)
+    if rms is not None and rms < _MIN_AUDIO_RMS:
+        raise RuntimeError(
+            f"Audio appears silent or near-silent (RMS={rms:.6f}). "
+            "Check microphone/input device and re-record."
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / (audio_path.stem + ".txt")

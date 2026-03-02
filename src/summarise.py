@@ -61,8 +61,8 @@ _TIMEOUT_RETRIES = _env_int("CONSULT_OLLAMA_TIMEOUT_RETRIES", 1)
 _RETRY_BACKOFF_SECONDS = _env_int("CONSULT_OLLAMA_TIMEOUT_BACKOFF_SECONDS", 2)
 # Keep the model in memory after requests to avoid repeated cold-start loads.
 _KEEP_ALIVE = os.environ.get("CONSULT_OLLAMA_KEEP_ALIVE", "20m")
-# Optional generation-length cap for faster responses (0 means unset).
-_NUM_PREDICT = _env_int("CONSULT_OLLAMA_NUM_PREDICT", 0)
+# Generation-length cap for faster responses.
+_NUM_PREDICT = _env_int("CONSULT_OLLAMA_NUM_PREDICT", 320)
 # Low temperature keeps deterministic SOAP outputs; can be overridden.
 _TEMPERATURE = _env_float("CONSULT_OLLAMA_TEMPERATURE", 0.1)
 
@@ -136,24 +136,21 @@ def read_transcript(path_str: str) -> str:
 def build_prompt(transcript_text: str) -> str:
     system_instruction = (
         "You are an Australian GP clinical documentation assistant. "
-        "Use Australian English spelling throughout (e.g., behaviour, anaesthesia, "
+        "Use Australian English spelling (for example behaviour, anaesthesia, "
         "haematology, paediatric, organise, recognise). "
-        "Follow Australian GP clinical conventions. "
-        "Where prescriptions are relevant, include PBS item codes. "
-        "Suggest an MBS item number using these rules only: "
-        "23 = Level B 6-19 min; 36 = Level C 20-39 min; 44 = Level D 40+ min. "
-        "Reference GP Management Plan item 721 and Mental Health Treatment Plan items "
-        "2710/2712 where clinically applicable. "
-        "Return your response using EXACTLY these section headers on their own line, "
-        "in this order:\n"
+        "Use concise clinical wording only; no disclaimers. "
+        "Where relevant, include PBS item codes and mention GP Management Plan item 721 "
+        "or Mental Health Treatment Plan items 2710/2712. "
+        "Suggest one MBS item using: 23 (6-19 min), 36 (20-39 min), 44 (40+ min). "
+        "Return EXACTLY these section headers on their own line, in this order:\n"
         "## Consultation Summary\n"
         "## Subjective\n"
         "## Objective\n"
         "## Assessment\n"
         "## Plan\n"
         "## Suggested MBS Item\n"
-        "Do not use any other header format. Do not use bold for section headers. "
-        "Do not include disclaimers or mention AI."
+        "Keep each section brief (1-4 bullet points). "
+        "Do not use any other headers and do not use bold section headers."
     )
 
     return (

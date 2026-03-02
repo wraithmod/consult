@@ -27,6 +27,7 @@ SAMPLE_RATE = 16_000
 CHANNELS = 1
 DTYPE = "float32"
 AUDIO_DIR = Path(__file__).parent.parent / "audio"
+MIN_AUDIO_RMS = 1e-4
 
 def parse_args():
     parser = argparse.ArgumentParser(description="GP Consultation GUI")
@@ -35,11 +36,18 @@ def parse_args():
         default="http://10.10.200.113:8000/process",
         help="Server URL for processing audio (default: http://10.10.200.113:8000/process)"
     )
+    parser.add_argument(
+        "--input-device",
+        type=int,
+        default=None,
+        help="Sounddevice input device index (optional).",
+    )
     # We use parse_known_args to avoid conflicts with Textual's own arguments
     return parser.parse_known_args()[0]
 
 ARGS = parse_args()
 SERVER_URL = ARGS.server
+INPUT_DEVICE = ARGS.input_device
 
 class RecordScreen(Screen):
     """The screen where audio recording happens."""
@@ -69,6 +77,8 @@ class RecordScreen(Screen):
         self.update_timer = None
 
     def _callback(self, indata, frame_count, time_info, status):
+        if status:
+            print(f"[audio status] {status}", file=sys.stderr)
         if self.recording:
             self.frames.append(indata.copy())
 
@@ -87,12 +97,16 @@ class RecordScreen(Screen):
         self.query_one("#start", Button).disabled = True
         self.query_one("#stop", Button).disabled = False
         
-        self.stream = sd.InputStream(
+        stream_kwargs = dict(
             samplerate=SAMPLE_RATE,
             channels=CHANNELS,
             dtype=DTYPE,
-            callback=self._callback
+            callback=self._callback,
         )
+        if INPUT_DEVICE is not None:
+            stream_kwargs["device"] = INPUT_DEVICE
+
+        self.stream = sd.InputStream(**stream_kwargs)
         self.stream.start()
         self.update_timer = self.set_interval(1, self.update_clock)
 
@@ -122,6 +136,15 @@ class RecordScreen(Screen):
 
         # Save audio locally
         audio = np.concatenate(self.frames, axis=0)
+        rms = float(np.sqrt(np.mean(audio * audio))) if audio.size else 0.0
+        peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+        if peak < MIN_AUDIO_RMS:
+            self.query_one("#status", Label).update(
+                "No microphone signal detected. Check input device and try again."
+            )
+            self.query_one("#start", Button).disabled = False
+            return
+
         audio_int16 = (audio * 32767).clip(-32768, 32767).astype(np.int16)
         
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -133,6 +156,7 @@ class RecordScreen(Screen):
             wf.setsampwidth(2)
             wf.setframerate(SAMPLE_RATE)
             wf.writeframes(audio_int16.tobytes())
+        print(f"[audio] saved {out_path.name} rms={rms:.6f} peak={peak:.6f}", file=sys.stderr)
 
         # Send to server
         try:
