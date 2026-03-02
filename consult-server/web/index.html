@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consult Web Recorder</title>
+  <style>
+    :root {
+      --bg: #f5f3ef;
+      --panel: #fffdf8;
+      --ink: #13232f;
+      --muted: #486173;
+      --primary: #0d6e6e;
+      --danger: #a6342a;
+      --border: #d5d3cc;
+      --accent: #f2c14e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 15% 0%, #fff9e7 0, var(--bg) 45%);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .card {
+      width: min(980px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      padding: 20px;
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.35rem;
+    }
+    p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .controls button,
+    .controls select {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+    .controls button {
+      cursor: pointer;
+      min-width: 130px;
+    }
+    .controls button.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: transparent;
+    }
+    .controls button.danger {
+      background: var(--danger);
+      color: #fff;
+      border-color: transparent;
+    }
+    #status {
+      border-left: 4px solid var(--accent);
+      background: #fff8df;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      min-height: 42px;
+    }
+    #note {
+      width: 100%;
+      min-height: 320px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font: 13px/1.45 "IBM Plex Mono", ui-monospace, monospace;
+      white-space: pre-wrap;
+      background: #fcfcfc;
+    }
+    @media (max-width: 760px) {
+      .controls button,
+      .controls select {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Consult Web Recorder</h1>
+    <p>Record in browser and submit to the same <code>/process</code> API used by CLI clients.</p>
+
+    <div id="status">Ready.</div>
+
+    <div class="row controls">
+      <button id="start" class="primary">Start Recording</button>
+      <button id="stop" class="danger" disabled>Stop</button>
+      <button id="send" disabled>Process Recording</button>
+      <select id="whisper">
+        <option value="medium" selected>Whisper: medium</option>
+        <option value="small">Whisper: small</option>
+        <option value="base">Whisper: base</option>
+      </select>
+      <select id="llm">
+        <option value="llama3" selected>LLM: llama3</option>
+      </select>
+    </div>
+
+    <pre id="note">Summary will appear here.</pre>
+  </main>
+
+  <script>
+    let mediaRecorder = null;
+    let chunks = [];
+    let blob = null;
+    let mimeType = "";
+
+    const $status = document.getElementById("status");
+    const $note = document.getElementById("note");
+    const $start = document.getElementById("start");
+    const $stop = document.getElementById("stop");
+    const $send = document.getElementById("send");
+    const $whisper = document.getElementById("whisper");
+    const $llm = document.getElementById("llm");
+
+    function setStatus(text) {
+      $status.textContent = text;
+    }
+
+    function preferredMimeType() {
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/ogg;codecs=opus",
+        "audio/webm",
+      ];
+      for (const t of candidates) {
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) {
+          return t;
+        }
+      }
+      return "";
+    }
+
+    function extensionFromMime(t) {
+      if (t.includes("ogg")) return "ogg";
+      if (t.includes("webm")) return "webm";
+      if (t.includes("mpeg")) return "mp3";
+      if (t.includes("mp4")) return "m4a";
+      return "webm";
+    }
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mimeType = preferredMimeType();
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        chunks = [];
+        blob = null;
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) chunks.push(event.data);
+        };
+        mediaRecorder.onstop = () => {
+          blob = new Blob(chunks, { type: mimeType || mediaRecorder.mimeType || "audio/webm" });
+          setStatus(`Recorded ${Math.round(blob.size / 1024)} KB. Ready to process.`);
+          $send.disabled = blob.size === 0;
+        };
+        mediaRecorder.start();
+        $start.disabled = true;
+        $stop.disabled = false;
+        $send.disabled = true;
+        setStatus("Recording...");
+      } catch (err) {
+        setStatus(`Microphone error: ${err.message}`);
+      }
+    }
+
+    function stopRecording() {
+      if (!mediaRecorder || mediaRecorder.state !== "recording") return;
+      mediaRecorder.stop();
+      $stop.disabled = true;
+      $start.disabled = false;
+    }
+
+    async function processRecording() {
+      if (!blob) {
+        setStatus("No recording available.");
+        return;
+      }
+      setStatus("Uploading and processing...");
+      $send.disabled = true;
+      $note.textContent = "Processing...";
+
+      const ext = extensionFromMime(blob.type || mimeType);
+      const fd = new FormData();
+      fd.append("file", blob, `recording.${ext}`);
+      fd.append("model_whisper", $whisper.value);
+      fd.append("model_llm", $llm.value);
+
+      try {
+        const response = await fetch("/process", { method: "POST", body: fd });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.detail || `HTTP ${response.status}`);
+        }
+        $note.textContent = payload.note || "No note returned.";
+        setStatus(`Done. Transcript: ${payload.transcript_file} | Note: ${payload.note_file}`);
+      } catch (err) {
+        $note.textContent = "";
+        setStatus(`Processing failed: ${err.message}`);
+      } finally {
+        $send.disabled = false;
+      }
+    }
+
+    $start.addEventListener("click", startRecording);
+    $stop.addEventListener("click", stopRecording);
+    $send.addEventListener("click", processRecording);
+  </script>
+</body>
+</html>
