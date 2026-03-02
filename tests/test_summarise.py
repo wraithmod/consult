@@ -141,6 +141,66 @@ def test_call_ollama_timeout(tmp_path, timeout_exc):
     assert excinfo.value.code == 1
 
 
+def test_call_ollama_read_timeout_message():
+    with mock.patch.object(summarise, "_RETRY_BACKOFF_SECONDS", 1), mock.patch.object(
+        summarise.urllib.request, "urlopen", side_effect=TimeoutError("timeout")
+    ):
+        with pytest.raises(RuntimeError) as excinfo:
+            summarise.call_ollama("llama3", "prompt text")
+
+    message = str(excinfo.value)
+    assert "Timed out waiting for Ollama response chunks" in message
+    assert "attempt(s)" in message
+    assert "Could not reach the local Ollama API" not in message
+
+
+def test_call_ollama_overall_timeout_message():
+    line = json.dumps({"response": "token", "done": False}).encode("utf-8") + b"\n"
+    cm = _urlopen_streaming_cm([line])
+
+    with mock.patch.object(summarise, "_OVERALL_TIMEOUT", 1), mock.patch.object(
+        summarise, "_TIMEOUT_RETRIES", 0
+    ), mock.patch.object(
+        summarise.time, "monotonic", side_effect=[0.0, 5.0]
+    ), mock.patch.object(summarise.urllib.request, "urlopen", return_value=cm):
+        with pytest.raises(RuntimeError) as excinfo:
+            summarise.call_ollama("llama3", "prompt text")
+
+    assert "Ollama generation exceeded" in str(excinfo.value)
+
+
+def test_call_ollama_timeout_then_retry_success():
+    cm = _single_chunk_cm("Recovered response")
+
+    with mock.patch.object(summarise, "_TIMEOUT_RETRIES", 1), mock.patch.object(
+        summarise, "_RETRY_BACKOFF_SECONDS", 2
+    ), mock.patch.object(
+        summarise.urllib.request,
+        "urlopen",
+        side_effect=[TimeoutError("timeout"), cm],
+    ), mock.patch.object(summarise.time, "sleep") as sleep_mock:
+        result = summarise.call_ollama("llama3", "prompt text")
+
+    assert result == "Recovered response"
+    sleep_mock.assert_called_once_with(2)
+
+
+def test_call_ollama_timeout_retry_exhausted():
+    with mock.patch.object(summarise, "_TIMEOUT_RETRIES", 1), mock.patch.object(
+        summarise, "_RETRY_BACKOFF_SECONDS", 1
+    ), mock.patch.object(
+        summarise.urllib.request,
+        "urlopen",
+        side_effect=TimeoutError("timeout"),
+    ), mock.patch.object(summarise.time, "sleep") as sleep_mock:
+        with pytest.raises(RuntimeError) as excinfo:
+            summarise.call_ollama("llama3", "prompt text")
+
+    assert "Timed out waiting for Ollama response chunks" in str(excinfo.value)
+    assert "after 2 attempt(s)" in str(excinfo.value)
+    sleep_mock.assert_called_once_with(1)
+
+
 def test_call_ollama_bad_json(tmp_path):
     """A non-JSON line in the stream is silently skipped; empty response raises RuntimeError."""
     transcript_path = tmp_path / "transcript.txt"

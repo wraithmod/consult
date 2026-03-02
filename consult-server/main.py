@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("consult-server")
 
 # Add the consult/src directory to sys.path to import modules
-REPO_ROOT = Path(__file__).resolve().parent.parent / "consult"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = REPO_ROOT / "src"
 sys.path.append(str(SRC_DIR))
 
