@@ -2,7 +2,7 @@
 
 Usage:
     python src/summarise.py --transcript transcripts/example.txt
-    python src/summarise.py --transcript transcripts/example.txt --model llama3.1
+    python src/summarise.py --transcript transcripts/example.txt --model gemma3:1b
     python src/summarise.py --transcript transcripts/example.txt --no-review
 
 Privacy and compliance:
@@ -60,9 +60,11 @@ _TIMEOUT_RETRIES = _env_int("CONSULT_OLLAMA_TIMEOUT_RETRIES", 1)
 # Fixed backoff between timeout retries (seconds).
 _RETRY_BACKOFF_SECONDS = _env_int("CONSULT_OLLAMA_TIMEOUT_BACKOFF_SECONDS", 2)
 # Keep the model in memory after requests to avoid repeated cold-start loads.
-_KEEP_ALIVE = os.environ.get("CONSULT_OLLAMA_KEEP_ALIVE", "20m")
+_KEEP_ALIVE = os.environ.get("CONSULT_OLLAMA_KEEP_ALIVE", "60m")
 # Generation-length cap for faster responses.
-_NUM_PREDICT = _env_int("CONSULT_OLLAMA_NUM_PREDICT", 320)
+_NUM_PREDICT = _env_int("CONSULT_OLLAMA_NUM_PREDICT", 192)
+# Smaller context window improves throughput for short consult transcripts.
+_NUM_CTX = _env_int("CONSULT_OLLAMA_NUM_CTX", 2048)
 # Low temperature keeps deterministic SOAP outputs; can be overridden.
 _TEMPERATURE = _env_float("CONSULT_OLLAMA_TEMPERATURE", 0.1)
 
@@ -81,6 +83,8 @@ def _build_generate_payload(model: str, prompt: str, *, stream: bool) -> dict:
     options: dict[str, int | float] = {"temperature": _TEMPERATURE}
     if _NUM_PREDICT > 0:
         options["num_predict"] = _NUM_PREDICT
+    if _NUM_CTX > 0:
+        options["num_ctx"] = _NUM_CTX
     payload["options"] = options
     return payload
 
@@ -96,8 +100,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default="llama3",
-        help="Ollama LLM model name (default: llama3)",
+        default="gemma3:1b",
+        help="Ollama LLM model name (default: gemma3:1b)",
     )
     parser.add_argument(
         "--output-dir",

@@ -3,122 +3,430 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Consult Web Recorder</title>
+  <title>Consult Recorder</title>
   <style>
     :root {
-      --bg: #f5f3ef;
-      --panel: #fffdf8;
-      --ink: #13232f;
-      --muted: #486173;
-      --primary: #0d6e6e;
-      --danger: #a6342a;
-      --border: #d5d3cc;
-      --accent: #f2c14e;
+      --bg: #f4f6f2;
+      --panel: #fbfcfa;
+      --ink: #1b2a35;
+      --muted: #5a6f7d;
+      --line: #cfd7d1;
+      --primary: #0f766e;
+      --primary-deep: #115e59;
+      --danger: #a33a33;
+      --accent: #f2d27a;
+      --good: #2b8a5a;
+      --warn: #c07b2b;
+      --mono: "IBM Plex Mono", "Courier New", monospace;
+      --sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+    }
+    [data-theme="dark"] {
+      --bg: #0f1419;
+      --panel: #161d24;
+      --ink: #e6edf3;
+      --muted: #9eb0bf;
+      --line: #2c3742;
+      --primary: #1f9d8f;
+      --primary-deep: #157b70;
+      --danger: #c95858;
+      --accent: #d6aa4f;
+      --good: #42b983;
+      --warn: #d29447;
+    }
+    [data-theme="graphite"] {
+      --bg: #1a1a1f;
+      --panel: #24242c;
+      --ink: #f0efe9;
+      --muted: #b1afc4;
+      --line: #3a3948;
+      --primary: #4682b4;
+      --primary-deep: #315d83;
+      --danger: #c55a5a;
+      --accent: #dfba73;
+      --good: #6abf89;
+      --warn: #d39a5f;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      color: var(--ink);
-      background: radial-gradient(circle at 15% 0%, #fff9e7 0, var(--bg) 45%);
       min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 16px;
-    }
-    .card {
-      width: min(980px, 100%);
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        radial-gradient(circle at 5% -10%, #fffbe9 0%, transparent 35%),
+        radial-gradient(circle at 95% 10%, #e8f4f1 0%, transparent 30%),
+        var(--bg);
       padding: 20px;
     }
-    h1 {
-      margin: 0 0 4px;
-      font-size: 1.35rem;
+    .shell {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
     }
-    p {
-      margin: 0 0 14px;
-      color: var(--muted);
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 10px 24px rgba(17, 37, 48, 0.08);
     }
-    .row {
+    .header {
+      padding: 16px 18px;
       display: flex;
-      gap: 10px;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: end;
       flex-wrap: wrap;
-      margin-bottom: 12px;
     }
-    .controls button,
-    .controls select {
-      border: 1px solid var(--border);
-      border-radius: 10px;
+    .title {
+      margin: 0;
+      font-size: 1.35rem;
+      letter-spacing: 0.01em;
+    }
+    .sub {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .status {
       padding: 10px 12px;
+      border-left: 4px solid var(--accent);
+      background: #fff8df;
+      border-radius: 8px;
+      min-width: 260px;
+      max-width: 100%;
+      font-size: 0.93rem;
+    }
+    .status.error {
+      border-left-color: #d15e4b;
+      background: #ffeceb;
+    }
+    .status.ok {
+      border-left-color: #2c9b61;
+      background: #eaf8f0;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 14px;
+    }
+    .recorder,
+    .history,
+    .detail {
+      padding: 16px;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    button,
+    select,
+    input {
+      border: 1px solid var(--line);
+      border-radius: 10px;
       font: inherit;
-      background: #fff;
+      padding: 10px 12px;
       color: var(--ink);
+      background: #ffffff;
     }
-    .controls button {
-      cursor: pointer;
-      min-width: 130px;
+    button { cursor: pointer; }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
     }
-    .controls button.primary {
-      background: var(--primary);
+    .primary {
+      background: linear-gradient(180deg, var(--primary), var(--primary-deep));
       color: #fff;
       border-color: transparent;
     }
-    .controls button.danger {
+    .danger {
       background: var(--danger);
       color: #fff;
       border-color: transparent;
     }
-    #status {
-      border-left: 4px solid var(--accent);
-      background: #fff8df;
-      padding: 10px 12px;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      min-height: 42px;
-    }
-    #note {
-      width: 100%;
-      min-height: 320px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
+    .chain {
+      margin-top: 14px;
       padding: 12px;
-      font: 13px/1.45 "IBM Plex Mono", ui-monospace, monospace;
+      border-radius: 10px;
+      border: 1px dashed #b8c4bc;
+      background: #f8faf7;
+      font-size: 0.92rem;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .node {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .node.active {
+      color: var(--ink);
+      border-color: #9bc7b4;
+      background: #f0fbf6;
+    }
+    .arrow { color: #7a8995; }
+    .history-header {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .history-list {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+    .history-item {
+      width: 100%;
+      border: 0;
+      border-bottom: 1px solid #eef2ef;
+      background: transparent;
+      padding: 10px 12px;
+      text-align: left;
+      display: grid;
+      gap: 2px;
+    }
+    .history-item:last-child { border-bottom: 0; }
+    .history-item:hover { background: #f3f8f6; }
+    .history-item.selected { background: #e8f5f1; }
+    .row-inline {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+    .meta { color: var(--muted); font-size: 0.84rem; }
+    .badge {
+      font-size: 0.73rem;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+    }
+    .badge.ok { color: #135b3b; background: #dcf4e7; border-color: #b6e4cc; }
+    .badge.partial { color: #825016; background: #fff0d9; border-color: #f3d4a5; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .artifact {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      min-height: 240px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+    .artifact h3 {
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid #eef2ef;
+      font-size: 0.95rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+    .artifact a { color: var(--primary-deep); text-decoration: none; }
+    .artifact a:hover { text-decoration: underline; }
+    .mini-btn {
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      border-radius: 8px;
+    }
+    .note-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 12px;
+      border-bottom: 1px solid #eef2ef;
+      min-height: 42px;
+      align-items: center;
+    }
+    .note-tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      background: #f5f8f6;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .note-tab.active {
+      background: #e6f5ef;
+      border-color: #92c9b4;
+      color: var(--ink);
+    }
+    .content {
+      margin: 0;
+      padding: 12px;
+      overflow: auto;
       white-space: pre-wrap;
-      background: #fcfcfc;
+      font: 12.5px/1.5 var(--mono);
     }
-    @media (max-width: 760px) {
-      .controls button,
-      .controls select {
-        width: 100%;
-      }
+    audio {
+      width: 100%;
+      margin-top: 10px;
     }
+    @media (max-width: 980px) {
+      .workspace { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: 1fr 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .controls { grid-template-columns: 1fr; }
+      body { padding: 12px; }
+    }
+    [data-theme="dark"] body {
+      background:
+        radial-gradient(circle at 5% -10%, #2b3325 0%, transparent 35%),
+        radial-gradient(circle at 95% 10%, #14383a 0%, transparent 30%),
+        var(--bg);
+    }
+    [data-theme="graphite"] body {
+      background:
+        radial-gradient(circle at 5% -10%, #39383f 0%, transparent 35%),
+        radial-gradient(circle at 95% 10%, #2b3344 0%, transparent 30%),
+        var(--bg);
+    }
+    [data-theme="dark"] .status {
+      background: #2a2412;
+      border-left-color: #b58b3b;
+    }
+    [data-theme="dark"] .status.error {
+      background: #3a1d1d;
+      border-left-color: #c75f5f;
+    }
+    [data-theme="dark"] .status.ok {
+      background: #183225;
+      border-left-color: #43a36e;
+    }
+    [data-theme="dark"] .chain,
+    [data-theme="dark"] .history-list,
+    [data-theme="dark"] .artifact,
+    [data-theme="dark"] .node,
+    [data-theme="dark"] button,
+    [data-theme="dark"] select,
+    [data-theme="dark"] input {
+      background: #1a222b;
+      color: var(--ink);
+    }
+    [data-theme="dark"] .history-item:hover { background: #23303b; }
+    [data-theme="dark"] .history-item.selected { background: #1e3a36; }
+    [data-theme="dark"] .note-tab { background: #24303a; color: var(--muted); }
+    [data-theme="dark"] .note-tab.active { background: #1f3f39; border-color: #4e8f7b; color: var(--ink); }
+    [data-theme="graphite"] .chain,
+    [data-theme="graphite"] .history-list,
+    [data-theme="graphite"] .artifact,
+    [data-theme="graphite"] .node,
+    [data-theme="graphite"] button,
+    [data-theme="graphite"] select,
+    [data-theme="graphite"] input {
+      background: #2a2933;
+      color: var(--ink);
+    }
+    [data-theme="graphite"] .history-item:hover { background: #333241; }
+    [data-theme="graphite"] .history-item.selected { background: #2f3c4d; }
+    [data-theme="graphite"] .note-tab { background: #353444; }
+    [data-theme="graphite"] .note-tab.active { background: #2f4458; border-color: #5f89ad; }
   </style>
 </head>
 <body>
-  <main class="card">
-    <h1>Consult Web Recorder</h1>
-    <p>Record in browser and submit to the same <code>/process</code> API used by CLI clients.</p>
+  <main class="shell">
+    <section class="panel header">
+      <div>
+        <h1 class="title">Consult Recorder</h1>
+        <p class="sub">Local-only pipeline: audio to transcript to SOAP summary.</p>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="theme" aria-label="Theme selector">
+          <option value="light">Theme: light</option>
+          <option value="dark">Theme: dark</option>
+          <option value="graphite">Theme: graphite</option>
+          <option value="system">Theme: system</option>
+        </select>
+        <div id="status" class="status">Ready.</div>
+      </div>
+    </section>
 
-    <div id="status">Ready.</div>
+    <section class="workspace">
+      <section class="panel recorder">
+        <h2>New Recording</h2>
+        <div class="controls">
+          <button id="start" class="primary">Start Recording</button>
+          <button id="stop" class="danger" disabled>Stop</button>
+          <button id="send" disabled>Process Recording</button>
+          <select id="whisper">
+            <option value="medium" selected>Whisper: medium</option>
+            <option value="small">Whisper: small</option>
+            <option value="base">Whisper: base</option>
+          </select>
+          <select id="llm">
+            <option value="gemma3:1b" selected>LLM: gemma3:1b</option>
+            <option value="gemma3:4b">LLM: gemma3:4b</option>
+            <option value="llama3">LLM: llama3</option>
+          </select>
+        </div>
 
-    <div class="row controls">
-      <button id="start" class="primary">Start Recording</button>
-      <button id="stop" class="danger" disabled>Stop</button>
-      <button id="send" disabled>Process Recording</button>
-      <select id="whisper">
-        <option value="medium" selected>Whisper: medium</option>
-        <option value="small">Whisper: small</option>
-        <option value="base">Whisper: base</option>
-      </select>
-      <select id="llm">
-        <option value="llama3" selected>LLM: llama3</option>
-      </select>
-    </div>
+        <div class="chain" id="latest-chain">
+          <span class="meta">Latest chain:</span>
+          <span class="node">audio</span>
+          <span class="arrow">-></span>
+          <span class="node">transcript</span>
+          <span class="arrow">-></span>
+          <span class="node">summary</span>
+        </div>
+        <audio id="latest-audio" controls style="display:none"></audio>
+      </section>
 
-    <pre id="note">Summary will appear here.</pre>
+      <section class="panel history">
+        <div class="history-header">
+          <h2 style="margin:0">Past Consults</h2>
+          <input id="history-search" type="search" placeholder="Search by consult id or filename">
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
+    </section>
+
+    <section class="panel detail">
+      <h2 id="detail-title" style="margin-top:0">Consult Detail</h2>
+      <div class="chain" id="detail-chain">
+        <span class="meta">Select a consult to load linked artifacts.</span>
+      </div>
+      <div class="detail-grid" style="margin-top:12px;">
+        <article class="artifact">
+          <h3>
+            <span>Transcript</span>
+            <a id="transcript-link" href="#" target="_blank" rel="noopener" style="display:none">open file</a>
+          </h3>
+          <pre id="transcript-content" class="content">No transcript selected.</pre>
+        </article>
+        <article class="artifact">
+          <h3>
+            <span>SOAP Summary</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button id="regen-note" class="mini-btn">Regenerate Summary</button>
+              <a id="note-link" href="#" target="_blank" rel="noopener" style="display:none">open file</a>
+            </div>
+          </h3>
+          <div id="note-tabs" class="note-tabs">
+            <span class="meta">No summary versions yet.</span>
+          </div>
+          <pre id="note-content" class="content">No summary selected.</pre>
+        </article>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -126,29 +434,74 @@
     let chunks = [];
     let blob = null;
     let mimeType = "";
+    let consults = [];
+    let filteredConsults = [];
+    let selectedConsultId = null;
+    let selectedNoteUrl = null;
 
     const $status = document.getElementById("status");
-    const $note = document.getElementById("note");
+    const $theme = document.getElementById("theme");
     const $start = document.getElementById("start");
     const $stop = document.getElementById("stop");
     const $send = document.getElementById("send");
     const $whisper = document.getElementById("whisper");
     const $llm = document.getElementById("llm");
+    const $historySearch = document.getElementById("history-search");
+    const $historyList = document.getElementById("history-list");
+    const $detailTitle = document.getElementById("detail-title");
+    const $detailChain = document.getElementById("detail-chain");
+    const $transcriptLink = document.getElementById("transcript-link");
+    const $noteLink = document.getElementById("note-link");
+    const $regenNote = document.getElementById("regen-note");
+    const $noteTabs = document.getElementById("note-tabs");
+    const $transcriptContent = document.getElementById("transcript-content");
+    const $noteContent = document.getElementById("note-content");
+    const $latestChain = document.getElementById("latest-chain");
+    const $latestAudio = document.getElementById("latest-audio");
+    const THEME_KEY = "consult_ui_theme";
 
-    function setStatus(text) {
+    function effectiveTheme(choice) {
+      if (choice === "system") {
+        return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+      }
+      return choice;
+    }
+
+    function applyTheme(choice) {
+      const resolved = effectiveTheme(choice);
+      document.documentElement.setAttribute("data-theme", resolved);
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem(THEME_KEY) || "light";
+      $theme.value = saved;
+      applyTheme(saved);
+      if (window.matchMedia) {
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+        media.addEventListener("change", () => {
+          if (($theme.value || "light") === "system") {
+            applyTheme("system");
+          }
+        });
+      }
+      $theme.addEventListener("change", () => {
+        const choice = $theme.value || "light";
+        localStorage.setItem(THEME_KEY, choice);
+        applyTheme(choice);
+      });
+    }
+
+    function setStatus(text, type = "") {
       $status.textContent = text;
+      $status.className = "status" + (type ? ` ${type}` : "");
     }
 
     function preferredMimeType() {
-      const candidates = [
-        "audio/webm;codecs=opus",
-        "audio/ogg;codecs=opus",
-        "audio/webm",
-      ];
+      const candidates = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm"];
       for (const t of candidates) {
-        if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) {
-          return t;
-        }
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
       }
       return "";
     }
@@ -166,18 +519,190 @@
         return "Microphone requires a secure context. Use HTTPS or open this app via localhost.";
       }
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-        return "This browser session does not expose getUserMedia. Check browser permissions/context.";
+        return "getUserMedia is unavailable in this browser context.";
       }
       if (!window.MediaRecorder) {
-        return "MediaRecorder is not available in this browser.";
+        return "MediaRecorder is unavailable in this browser.";
       }
       return "";
+    }
+
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString();
+    }
+
+    function chainHtml(consult) {
+      const parts = [
+        ["audio", consult.audio_url, consult.audio_file],
+        ["transcript", consult.transcript_url, consult.transcript_file],
+        ["summary", consult.note_url, consult.note_file],
+      ];
+      return parts.map((part, idx) => {
+        const label = part[0];
+        const url = part[1];
+        const name = part[2];
+        const node = url
+          ? `<a class="node active" href="${url}" target="_blank" rel="noopener" title="${name}">${label}</a>`
+          : `<span class="node">${label}</span>`;
+        if (idx === parts.length - 1) return node;
+        return `${node}<span class="arrow">-></span>`;
+      }).join(" ");
+    }
+
+    function getConsultById(consultId) {
+      return consults.find((c) => c.consult_id === consultId) || null;
+    }
+
+    function applyHistoryFilter() {
+      const q = $historySearch.value.trim().toLowerCase();
+      filteredConsults = consults.filter((c) => {
+        if (!q) return true;
+        const hay = `${c.consult_id} ${c.audio_file || ""} ${c.transcript_file || ""} ${c.note_file || ""}`.toLowerCase();
+        return hay.includes(q);
+      });
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (!filteredConsults.length) {
+        $historyList.innerHTML = '<div class="meta" style="padding:12px;">No consults found.</div>';
+        return;
+      }
+      $historyList.innerHTML = filteredConsults.map((c) => {
+        const selectedClass = c.consult_id === selectedConsultId ? " selected" : "";
+        const badge = c.is_complete
+          ? '<span class="badge ok">complete</span>'
+          : '<span class="badge partial">partial</span>';
+        return `
+          <button class="history-item${selectedClass}" data-consult-id="${c.consult_id}">
+            <div class="row-inline">
+              <strong>${c.consult_id}</strong>
+              ${badge}
+            </div>
+            <div class="meta">${fmtTime(c.created_at)}</div>
+            <div class="meta">${c.audio_file || "(no audio)"}</div>
+          </button>
+        `;
+      }).join("");
+
+      for (const el of $historyList.querySelectorAll(".history-item")) {
+        el.addEventListener("click", () => {
+          const consultId = el.getAttribute("data-consult-id");
+          selectConsult(consultId);
+        });
+      }
+    }
+
+    async function readTextArtifact(url) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to read artifact: ${response.status}`);
+      return await response.text();
+    }
+
+    function setLink(anchor, url) {
+      if (!url) {
+        anchor.style.display = "none";
+        anchor.removeAttribute("href");
+        return;
+      }
+      anchor.style.display = "inline";
+      anchor.href = url;
+    }
+
+    function renderNoteTabs(consult, activeUrl) {
+      const versions = Array.isArray(consult.note_versions) ? consult.note_versions : [];
+      if (!versions.length) {
+        $noteTabs.innerHTML = '<span class="meta">No summary versions yet.</span>';
+        return;
+      }
+
+      $noteTabs.innerHTML = versions.map((version) => {
+        const active = version.url === activeUrl ? " active" : "";
+        return `<button class="note-tab${active}" data-note-url="${version.url}" title="${version.file}">${version.label}</button>`;
+      }).join("");
+
+      for (const el of $noteTabs.querySelectorAll(".note-tab")) {
+        el.addEventListener("click", async () => {
+          const noteUrl = el.getAttribute("data-note-url");
+          await loadNoteForConsult(consult, noteUrl);
+          renderNoteTabs(consult, noteUrl);
+        });
+      }
+    }
+
+    async function loadNoteForConsult(consult, noteUrl) {
+      selectedNoteUrl = noteUrl || null;
+      setLink($noteLink, selectedNoteUrl);
+      if (!selectedNoteUrl) {
+        $noteContent.textContent = "Summary file missing.";
+        return;
+      }
+      $noteContent.textContent = "Loading summary...";
+      try {
+        const noteText = await readTextArtifact(selectedNoteUrl);
+        $noteContent.textContent = noteText;
+      } catch (_ignored) {
+        $noteContent.textContent = "Could not load summary.";
+      }
+    }
+
+    async function selectConsult(consultId, preferredNoteUrl = null) {
+      const consult = getConsultById(consultId);
+      if (!consult) return;
+
+      selectedConsultId = consultId;
+      renderHistory();
+
+      $detailTitle.textContent = `Consult Detail: ${consult.consult_id}`;
+      $detailChain.innerHTML = `<span class="meta">Linked pipeline:</span> ${chainHtml(consult)}`;
+      setLink($transcriptLink, consult.transcript_url);
+
+      if (consult.audio_url) {
+        $latestAudio.src = consult.audio_url;
+        $latestAudio.style.display = "block";
+      }
+
+      $transcriptContent.textContent = "Loading transcript...";
+      $noteContent.textContent = "Loading summary...";
+
+      try {
+        const transcriptText = consult.transcript_url
+          ? await readTextArtifact(consult.transcript_url)
+          : "Transcript file missing.";
+        $transcriptContent.textContent = transcriptText;
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        $transcriptContent.textContent = "Could not load transcript.";
+        setStatus(`Artifact load failed: ${msg}`, "error");
+      }
+
+      const activeNoteUrl = preferredNoteUrl || consult.note_url || null;
+      renderNoteTabs(consult, activeNoteUrl);
+      await loadNoteForConsult(consult, activeNoteUrl);
+    }
+
+    async function loadHistory(selectFirst = true) {
+      try {
+        const response = await fetch("/consults?limit=300");
+        if (!response.ok) throw new Error(`History request failed: ${response.status}`);
+        const payload = await response.json();
+        consults = Array.isArray(payload.consults) ? payload.consults : [];
+        applyHistoryFilter();
+        if (selectFirst && consults.length && !selectedConsultId) {
+          await selectConsult(consults[0].consult_id);
+        }
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        setStatus(`History load failed: ${msg}`, "error");
+      }
     }
 
     async function startRecording() {
       const prereqError = getMicPrereqError();
       if (prereqError) {
-        setStatus(`Microphone error: ${prereqError}`);
+        setStatus(`Microphone error: ${prereqError}`, "error");
         return;
       }
       try {
@@ -186,22 +711,25 @@
         mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         chunks = [];
         blob = null;
+
         mediaRecorder.ondataavailable = (event) => {
           if (event.data && event.data.size > 0) chunks.push(event.data);
         };
+
         mediaRecorder.onstop = () => {
           blob = new Blob(chunks, { type: mimeType || mediaRecorder.mimeType || "audio/webm" });
           setStatus(`Recorded ${Math.round(blob.size / 1024)} KB. Ready to process.`);
           $send.disabled = blob.size === 0;
         };
+
         mediaRecorder.start();
         $start.disabled = true;
         $stop.disabled = false;
         $send.disabled = true;
-        setStatus("Recording...");
+        setStatus("Recording in progress...");
       } catch (err) {
         const reason = err && err.message ? err.message : String(err);
-        setStatus(`Microphone error: ${reason}`);
+        setStatus(`Microphone error: ${reason}`, "error");
       }
     }
 
@@ -214,12 +742,14 @@
 
     async function processRecording() {
       if (!blob) {
-        setStatus("No recording available.");
+        setStatus("No recording available.", "error");
         return;
       }
+
       setStatus("Uploading and processing...");
       $send.disabled = true;
-      $note.textContent = "Processing...";
+      $noteContent.textContent = "";
+      $transcriptContent.textContent = "Processing...";
 
       const ext = extensionFromMime(blob.type || mimeType);
       const fd = new FormData();
@@ -228,29 +758,175 @@
       fd.append("model_llm", $llm.value);
 
       try {
-        const response = await fetch("/process", { method: "POST", body: fd });
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.detail || `HTTP ${response.status}`);
+        const response = await fetch("/process_stream", {
+          method: "POST",
+          body: fd,
+          headers: { "Accept": "text/event-stream" },
+        });
+        if (!response.ok || !response.body) {
+          throw new Error(`Stream request failed: HTTP ${response.status}`);
         }
-        $note.textContent = payload.note || "No note returned.";
-        setStatus(`Done. Transcript: ${payload.transcript_file} | Note: ${payload.note_file}`);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let currentEvent = "message";
+        let donePayload = null;
+        let errored = false;
+
+        const applyEvent = async (eventName, dataText) => {
+          let payload = {};
+          try {
+            payload = dataText ? JSON.parse(dataText) : {};
+          } catch (_ignored) {
+            payload = {};
+          }
+
+          if (eventName === "stage") {
+            if (payload.name === "transcription_started") {
+              setStatus(`Transcribing audio with ${payload.model_whisper || $whisper.value}...`);
+            } else if (payload.name === "transcription_done") {
+              setStatus("Transcription complete. Generating summary...");
+              if (payload.transcript_url) {
+                try {
+                  const transcriptText = await readTextArtifact(payload.transcript_url);
+                  $transcriptContent.textContent = transcriptText;
+                } catch (_ignored) {
+                  $transcriptContent.textContent = "Transcript generated, but could not be loaded.";
+                }
+              }
+            } else if (payload.name === "summarisation_started") {
+              setStatus(`Summarising with ${payload.model_llm || $llm.value}...`);
+            }
+            return;
+          }
+
+          if (eventName === "token") {
+            const token = payload.text || "";
+            if (token) {
+              $noteContent.textContent += token;
+            }
+            return;
+          }
+
+          if (eventName === "done") {
+            donePayload = payload;
+            return;
+          }
+
+          if (eventName === "error") {
+            const detail = payload.detail || "Unknown processing error.";
+            errored = true;
+            throw new Error(detail);
+          }
+        };
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let sepIndex = buffer.indexOf("\n\n");
+          while (sepIndex !== -1) {
+            const rawEvent = buffer.slice(0, sepIndex);
+            buffer = buffer.slice(sepIndex + 2);
+            sepIndex = buffer.indexOf("\n\n");
+
+            if (!rawEvent.trim()) {
+              currentEvent = "message";
+              continue;
+            }
+
+            const lines = rawEvent.split("\n");
+            let dataText = "";
+            let eventName = currentEvent;
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                eventName = line.slice(6).trim() || "message";
+              } else if (line.startsWith("data:")) {
+                dataText += line.slice(5).trim();
+              }
+            }
+            await applyEvent(eventName, dataText);
+            currentEvent = "message";
+          }
+        }
+
+        if (!donePayload && !errored) {
+          throw new Error("Stream ended before completion payload.");
+        }
+
+        if (donePayload) {
+          $latestChain.innerHTML = `<span class="meta">Latest chain:</span> ${chainHtml(donePayload)}`;
+          if (donePayload.audio_url) {
+            $latestAudio.src = donePayload.audio_url;
+            $latestAudio.style.display = "block";
+          }
+
+          await loadHistory(false);
+          if (donePayload.consult_id) {
+            await selectConsult(donePayload.consult_id);
+          } else if (consults.length) {
+            await selectConsult(consults[0].consult_id);
+          }
+          setStatus(`Done. ${donePayload.consult_id || "Consult processed."}`, "ok");
+        }
       } catch (err) {
-        $note.textContent = "";
-        setStatus(`Processing failed: ${err.message}`);
+        const message = err && err.message ? err.message : String(err);
+        setStatus(`Processing failed: ${message}`, "error");
+        $transcriptContent.textContent = "";
+        if (!$noteContent.textContent.trim()) {
+          $noteContent.textContent = "";
+        }
       } finally {
         $send.disabled = false;
+      }
+    }
+
+    async function regenerateSelectedConsult() {
+      if (!selectedConsultId) {
+        setStatus("Select a consult first.", "error");
+        return;
+      }
+
+      $regenNote.disabled = true;
+      setStatus(`Regenerating summary for ${selectedConsultId} with ${$llm.value}...`);
+      try {
+        const fd = new FormData();
+        fd.append("model_llm", $llm.value);
+        const response = await fetch(`/consults/${encodeURIComponent(selectedConsultId)}/regenerate`, {
+          method: "POST",
+          body: fd,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const detail = payload && payload.detail ? payload.detail : `HTTP ${response.status}`;
+          throw new Error(detail);
+        }
+        await loadHistory(false);
+        await selectConsult(selectedConsultId, payload.note_url || null);
+        setStatus(`Regenerated summary (${payload.note_file || "new version"}).`, "ok");
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        setStatus(`Regeneration failed: ${message}`, "error");
+      } finally {
+        $regenNote.disabled = false;
       }
     }
 
     $start.addEventListener("click", startRecording);
     $stop.addEventListener("click", stopRecording);
     $send.addEventListener("click", processRecording);
+    $regenNote.addEventListener("click", regenerateSelectedConsult);
+    $historySearch.addEventListener("input", applyHistoryFilter);
 
     const startupMicError = getMicPrereqError();
     if (startupMicError) {
-      setStatus(`Microphone unavailable: ${startupMicError}`);
+      setStatus(`Microphone unavailable: ${startupMicError}`, "error");
     }
+
+    initTheme();
+    loadHistory(true);
   </script>
 </body>
 </html>
